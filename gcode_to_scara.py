@@ -122,8 +122,8 @@ with open(INPUT_NAME, 'r', encoding="utf-8") as infile:
 centroid = Vertex(sum(x_vals)/len(x_vals), sum(y_vals)/len(x_vals)) if CENTER_DRAWING else Vertex(0,0)
 
 #TODO: Remove Houdini code
-node = hou.pwd() 
-geo = node.geometry()
+# node = hou.pwd() 
+# geo = node.geometry()
 
 # Generate Clean "Funky SCARA GCode" with resampled points between original GCode Positions.
 with open(OUTPUT_NAME, 'w', encoding="utf-8") as outfile:
@@ -185,8 +185,8 @@ with open(OUTPUT_NAME, 'w', encoding="utf-8") as outfile:
                 y = vertex.y
 
             # TODO: Remove Houdini Code
-            pt = geo.createPoint()
-            pt.setPosition(hou.Vector3(x, y, 0))
+            # pt = geo.createPoint()
+            # pt.setPosition(hou.Vector3(x, y, 0))
 
             line_command = f"G01 X{x:.3f} Y{y:.3f} Z0.0"
 
