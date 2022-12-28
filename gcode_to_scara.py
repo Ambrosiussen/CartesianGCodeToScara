@@ -15,8 +15,9 @@ MAX_RHO = 1.0 # Needs to be between 0.0 and 1.0
 UNITS_PER_CIRCLE = 360.0
 LINE_SEGMENT_SIZE = 1
 CENTER_DRAWING = True
-SCARA = True
-UNIFORM_SCALE = 1.0
+SCARA = False
+SCALE_TO_FIT = True
+UNIFORM_SCALE = 1.0 
 DEFAULT_DRAWING_SPEED = 1000.0
 
 #####################################
@@ -66,10 +67,9 @@ def get_vertex_from_g01_command(command):
     """
     Creates a Vertex instance from a G01 GCode command.
     """
-    X = float(re.search(r"X\d+\.\d+", command).group(0)[1:])
-    Y = float(re.search(r"Y\d+\.\d+", command).group(0)[1:])
+    X = float(re.search(r"X\d+\.*\d*", command).group(0)[1:])
+    Y = float(re.search(r"Y\d+\.*\d*", command).group(0)[1:])
     return Vertex(X, Y)
-    #return Vertex(float(elements[1][1:]), float(elements[2][1:]))
 
 def get_samples_between_vertices(p1, p2, resample_distance):
     """
@@ -94,7 +94,7 @@ def get_samples_between_vertices(p1, p2, resample_distance):
 
         return [Vertex(x, y[i]) for i, x in enumerate(x)]
 
-def cartesian_xy_from_thetarho(theta, rho):
+def scara_xy_from_thetarho(theta, rho):
     """
     Convert theta rho to funky SCARA XY coordinates in cartesian space.
     """
@@ -119,11 +119,15 @@ with open(INPUT_NAME, 'r', encoding="utf-8") as infile:
 
 # Computing the average position of all gcode commands.
 # We do this to center the drawing for SCARA machines with the center being 0,0
+# We also compute a scaling factor for scaling the drawing to fit MAX_RADIUS
 centroid = Vertex(sum(x_vals)/len(x_vals), sum(y_vals)/len(x_vals)) if CENTER_DRAWING else Vertex(0,0)
+_maxX = max(map(lambda x: x-centroid.x,x_vals, key=abs))
+_maxY = max(map(lambda y: y-centroid.y,y_vals, key=abs))
+autofit = (MAX_RADIUS/(max(_maxX, _maxY)+1.5)) if SCALE_TO_FIT else 1.0
 
 #TODO: Remove Houdini code
-# node = hou.pwd() 
-# geo = node.geometry()
+node = hou.pwd() 
+geo = node.geometry()
 
 # Generate Clean "Funky SCARA GCode" with resampled points between original GCode Positions.
 with open(OUTPUT_NAME, 'w', encoding="utf-8") as outfile:
@@ -143,6 +147,7 @@ with open(OUTPUT_NAME, 'w', encoding="utf-8") as outfile:
         elements = line.split(" ")
         vertex1 = get_vertex_from_g01_command(line)
         vertex1 -= centroid
+        vertex1 *= autofit
         vertex1 *= UNIFORM_SCALE
 
         # If the GCode file has one more command after it, create samples from current
@@ -151,6 +156,7 @@ with open(OUTPUT_NAME, 'w', encoding="utf-8") as outfile:
         if idx+1 < len(valid_commands):
             vertex2 = get_vertex_from_g01_command(valid_commands[idx+1])
             vertex2 -= centroid
+            vertex2 *= autofit
             vertex2 *= UNIFORM_SCALE
             vertices = get_samples_between_vertices(vertex1, vertex2, LINE_SEGMENT_SIZE)
         else:
@@ -179,14 +185,14 @@ with open(OUTPUT_NAME, 'w', encoding="utf-8") as outfile:
                 _previousRawTheta = rawTheta
                 _previousTheta = theta
 
-                x,y = cartesian_xy_from_thetarho(theta, rho)
+                x,y = scara_xy_from_thetarho(theta, rho)
             else:
                 x = vertex.x
                 y = vertex.y
 
             # TODO: Remove Houdini Code
-            # pt = geo.createPoint()
-            # pt.setPosition(hou.Vector3(x, y, 0))
+            pt = geo.createPoint()
+            pt.setPosition(hou.Vector3(x, y, 0))
 
             line_command = f"G01 X{x:.3f} Y{y:.3f} Z0.0"
 
@@ -194,6 +200,6 @@ with open(OUTPUT_NAME, 'w', encoding="utf-8") as outfile:
             outfile.write(f"{line_command}\n")
 
     # Force the drawing to end on the perimeter of the canvas
-    x,y = cartesian_xy_from_thetarho(_previousTheta, MAX_RHO)
+    x,y = scara_xy_from_thetarho(_previousTheta, MAX_RHO)
     line_command = f"G01 X{x:.3f} Y{y:.3f} Z0.0"
     outfile.write(f"{line_command}\n")
